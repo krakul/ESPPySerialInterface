@@ -1,14 +1,8 @@
-# Template Project
-Project ID: KR-XX-00-FW-00
+# Python ESP32  Serial Interface
 
-Cool Project
+Python script to communicate with ESP32 devices over serial interface.
 
-# Mis peaks siin kirjas olema
-* **About peab sisaldama projekti koodi/ID ala. KR-XX-00-FW-00**
-* Pikk kirjeldus mis asi ta on ja kuidas ta on seotud teiste juppidega
-* Dev masina setup
-* Konkreetsed commandid kuidas buildima saada
-* Kuidas käivitada
-* Kuidas testida
-* Kuidas seadmega ühenduda (Lihtne pilt, riistvara ühenduse kirjeldus) või viide dokumentatsioonile
+Handles reconnection and data parsing. Logs received data to whatever logging is supplied or to stdout.
 
+Function queue_request_wait_response can be used to send a request and wait for a certain response.
+Only start of response is matched.
