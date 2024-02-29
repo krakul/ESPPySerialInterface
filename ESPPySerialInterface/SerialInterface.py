@@ -130,7 +130,7 @@ class SerialInterface(Thread):
 
         # Construct fields
         self.serial_list = port_list
-        self.is_not_stopped = True
+        self.stop_flag = False
 
     # Connect to first available serial interface
     def __connect(self):
@@ -192,24 +192,25 @@ class SerialInterface(Thread):
     def __read_message(self) -> Event:
 
         # Read line bytes - note that it can time out
-        line = self.serial.readline()
+        try:
+            line = self.serial.readline()
+        except Exception as e:  # throws typeerror if processing loop/thread is not properly terminated
+            print("__read_message: ", e, type(e))
+            raise
 
         # Got line ?
         if line:
             # Cut the new line character
             if line[-1] == 0x0a:
-                line = line[:-1]
+                # line = line[:-1]
+                line = line.strip(b'\n')
                 if len(line) == 0:
                     msg = InvalidMessage(timestamp=time.time(), content=line.hex('-'), error="Msg only 0x0a")
                     return msg
-
+            # Cut the carriage return character
             if line[-1] == 0x0d:
-                line = line[:-1]
-                if len(line) == 0:
-                    msg = InvalidMessage(timestamp=time.time(), content=line.hex('-'), error="Msg only 0x0d")
-                    return msg
-                if line[-1] == 0x0d:
-                    line = line[:-1]
+                # line = line[:-1]
+                line = line.strip(b'\r')
                 if len(line) == 0:
                     msg = InvalidMessage(timestamp=time.time(), content=line.hex('-'), error="Msg only 0x0d")
                     return msg
@@ -218,7 +219,7 @@ class SerialInterface(Thread):
             for b in line:
                 if b < 0x20 or b > 0x7E:
                     msg = InvalidMessage(timestamp=time.time(), content=line.hex('-'), error="Illegal character(s)")
-                    print(line)
+                    print(line, hex(b))
                     self.__append_to_log(msg)
                     return msg
 
@@ -240,7 +241,12 @@ class SerialInterface(Thread):
     def __wait_for_response(self, required_resp_start, resp_type, timeout):
         timeout_time = time.time() + timeout
         while True:
-            msg = self.__read_message()
+            try:
+                msg = self.__read_message()
+            except serial.SerialException:
+                raise
+            except Exception as e:
+                print(f'__handle_serial_request caught exc - ', e)
 
             # Got something ?
             if isinstance(msg, resp_type):
@@ -253,6 +259,7 @@ class SerialInterface(Thread):
                 else:
                     if required_resp_start in msg.content:
                         return msg
+            # if isinstance(msg, C)
 
             # Timeout ?
             if time.time() > timeout_time:
@@ -281,7 +288,13 @@ class SerialInterface(Thread):
 
             # Wait for response, but collect all other messages also
             while True:
-                msg = self.__read_message()
+                try:
+                    msg = self.__read_message()
+                except serial.SerialException:
+                    raise
+                except Exception as e:
+                    print(f'__handle_serial_request caught exc - ', e)
+
 
                 # Got something ?
                 if isinstance(msg, resp_type):
@@ -306,7 +319,7 @@ class SerialInterface(Thread):
 
     # Main loop
     def __main_loop(self):
-        while self.is_not_stopped:
+        while True:
             try:
                 # Read messages and just log them
                 self.__read_message()
@@ -333,11 +346,17 @@ class SerialInterface(Thread):
                 self.__append_to_log(conn)
                 self.serial.close()
                 break
+            if self.stop_flag:
+                break
 
     # Thread entry function
     def run(self):
-        while self.is_not_stopped:
+        while True:
 
+            if self.stop_flag:
+                if self.serial:
+                    self.serial.close()
+                break
             # If connection succeeds, go to main loop
             if self.__connect():
                 self.__main_loop()
@@ -356,6 +375,9 @@ class SerialInterface(Thread):
                         self.response_queue.put(conn)
                     except QueueEmpty:
                         pass
+
+    def stop(self):
+        self.stop_flag = True
 
     # Queue request and wait for response (up to 10 seconds)
     def queue_request_wait_response(self, req, required_resp_start, resp_type=SuccessResponseMessage, timeout=1.5):
