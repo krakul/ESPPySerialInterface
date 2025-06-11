@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """
 ESP32 serial communication interface
 """
